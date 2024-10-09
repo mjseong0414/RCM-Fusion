@@ -92,7 +92,6 @@ git clone https://github.com/mjseong0414/RCM-Fusion.git
 **d. Prepare pretrained models.**
 ```
 mkdir ckpts
-
 cd ckpts
 
 # rcm-fusion-r101-icra-final checkpoint (google drive link)
