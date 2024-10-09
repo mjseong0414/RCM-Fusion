@@ -26,6 +26,7 @@ bevformer
 ├── configs/
 ├── ckpts/
 │   ├── r101_dcn_fcos3d_pretrain.pth
+│   ├── bevformer_small_static.pth
 ├── data/
 │   ├── can_bus/
 │   ├── nuscenes/
