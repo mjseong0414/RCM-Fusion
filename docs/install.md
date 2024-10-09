@@ -59,6 +59,14 @@ pip install einops
 git clone https://github.com/mjseong0414/RCM-Fusion.git
 ```
 
+**i. Prepare pretrained models.**
+```
+mkdir ckpts
+
+cd ckpts &
+```
+
+
 # Docker instructions
 
 **a. Docker image download and create container.**
@@ -79,4 +87,11 @@ pip install -v -e .
 **c. Clone RCM-Fusion.**
 ```
 git clone https://github.com/mjseong0414/RCM-Fusion.git
+```
+
+**d. Prepare pretrained models.**
+```
+mkdir ckpts
+
+cd ckpts &
 ```
