@@ -93,5 +93,12 @@ git clone https://github.com/mjseong0414/RCM-Fusion.git
 ```
 mkdir ckpts
 
-cd ckpts &
+cd ckpts
+
+# rcm-fusion
+https://drive.google.com/file/d/1K985CxSAnjKMkt1vg53MkkSwTTcnRYV-/view?usp=drive_link
+
+# rcm-fusion-r101-icra-final checkpoint (google drive link)
+https://drive.google.com/file/d/1GO5f9DnJHRltFLWEdgv-owjxKvuXIWv4/view?usp=drive_link
+
 ```
