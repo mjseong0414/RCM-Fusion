@@ -1,10 +1,8 @@
-# ---------------------------------------------
-# Copyright (c) OpenMMLab. All rights reserved.
-# ---------------------------------------------
-#  Modified by Zhiqi Li
-# ---------------------------------------------
- 
 from __future__ import division
+
+# import sys
+# sys.path.append('/home/spalab/RCM_fusion/mmdetection3d')
+# sys.path.append('/home/spalab/RCM_fusion/mmdetection3d/RCM-Fusion')
 
 import argparse
 import copy
@@ -28,7 +26,6 @@ from mmdet.apis import set_random_seed
 from mmseg import __version__ as mmseg_version
 
 from mmcv.utils import TORCH_VERSION, digit_version
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
@@ -98,7 +95,6 @@ def parse_args():
 
     return args
 
-
 def main():
     args = parse_args()
 
@@ -134,7 +130,7 @@ def main():
                 print(_module_path)
                 plg_lib = importlib.import_module(_module_path)
 
-            from projects.mmdet3d_plugin.bevformer.apis.train import custom_train_model
+            from projects.mmdet3d_plugin.rcm_fusion.apis.train import custom_train_model
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
@@ -217,7 +213,7 @@ def main():
         train_cfg=cfg.get('train_cfg'),
         test_cfg=cfg.get('test_cfg'))
     model.init_weights()
-
+    
     logger.info(f'Model:\n{model}')
     datasets = [build_dataset(cfg.data.train)]
     if len(cfg.workflow) == 2:
@@ -253,7 +249,6 @@ def main():
         validate=(not args.no_validate),
         timestamp=timestamp,
         meta=meta)
-
 
 if __name__ == '__main__':
     main()

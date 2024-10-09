@@ -1,8 +1,7 @@
-# ---------------------------------------------
-# Copyright (c) OpenMMLab. All rights reserved.
-# ---------------------------------------------
-#  Modified by Zhiqi Li
-# ---------------------------------------------
+# import sys
+# sys.path.append('/home/spalab/RCM_fusion/mmdetection3d')
+# sys.path.append('/home/spalab/RCM_fusion/mmdetection3d/RCM-Fusion')
+
 import argparse
 import mmcv
 import os
@@ -19,7 +18,7 @@ from mmdet3d.datasets import build_dataset
 from projects.mmdet3d_plugin.datasets.builder import build_dataloader
 from mmdet3d.models import build_model
 from mmdet.apis import set_random_seed
-from projects.mmdet3d_plugin.bevformer.apis.test import custom_multi_gpu_test
+from projects.mmdet3d_plugin.rcm_fusion.apis.test import custom_multi_gpu_test
 from mmdet.datasets import replace_ImageToTensor
 import time
 import os.path as osp
@@ -220,7 +219,7 @@ def main():
     elif hasattr(dataset, 'PALETTE'):
         # segmentation dataset has `PALETTE` attribute
         model.PALETTE = dataset.PALETTE
-
+    
     if not distributed:
         assert False
         # model = MMDataParallel(model, device_ids=[0])
@@ -255,6 +254,7 @@ def main():
                 eval_kwargs.pop(key, None)
             eval_kwargs.update(dict(metric=args.eval, **kwargs))
 
+            # print(dataset.evaluate(_, **eval_kwargs))
             print(dataset.evaluate(outputs, **eval_kwargs))
 
 

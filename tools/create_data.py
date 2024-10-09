@@ -3,15 +3,19 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
-from data_converter.create_gt_database import create_groundtruth_database
+
+import sys
+sys.path.append('/home/spalab/RC_fusion/mmdetection3d')
+sys.path.append('/home/spalab/RC_fusion/mmdetection3d/BEVFormer')
+
+from data_converter.create_gt_database import create_groundtruth_database, create_groundtruth_database_radar
 from data_converter import nuscenes_converter as nuscenes_converter
 from data_converter import lyft_converter as lyft_converter
 from data_converter import kitti_converter as kitti
 from data_converter import indoor_converter as indoor
+
 import argparse
 from os import path as osp
-import sys
-sys.path.append('.')
 
 
 def kitti_data_prep(root_path, info_prefix, version, out_dir):
@@ -71,23 +75,27 @@ def nuscenes_data_prep(root_path,
     """
     nuscenes_converter.create_nuscenes_infos(
         root_path, out_dir, can_bus_root_path, info_prefix, version=version, max_sweeps=max_sweeps)
-
+    
+    dataset_name = 'CustomNuScenesDataset'
+    
     if version == 'v1.0-test':
         info_test_path = osp.join(
-            out_dir, f'{info_prefix}_infos_temporal_test.pkl')
+            out_dir, f'{info_prefix}_infos_temporal_radar_test.pkl')
         nuscenes_converter.export_2d_annotation(
             root_path, info_test_path, version=version)
     else:
-        info_train_path = osp.join(
-            out_dir, f'{info_prefix}_infos_temporal_train.pkl')
-        info_val_path = osp.join(
-            out_dir, f'{info_prefix}_infos_temporal_val.pkl')
-        nuscenes_converter.export_2d_annotation(
-            root_path, info_train_path, version=version)
-        nuscenes_converter.export_2d_annotation(
-            root_path, info_val_path, version=version)
+        # info_train_path = osp.join(
+        #     out_dir, f'{info_prefix}_infos_temporal_radar_train_sweep6.pkl')
+        # info_val_path = osp.join(
+        #     out_dir, f'{info_prefix}_infos_temporal_radar_val_sweep6.pkl')
+        # nuscenes_converter.export_2d_annotation(
+        #     root_path, info_train_path, version=version)
+        # nuscenes_converter.export_2d_annotation(
+        #     root_path, info_val_path, version=version)
         # create_groundtruth_database(dataset_name, root_path, info_prefix,
-        #                             f'{out_dir}/{info_prefix}_infos_train.pkl')
+        #                             f'{out_dir}/{info_prefix}_infos_temporal_radar_train_sweep6.pkl')
+        create_groundtruth_database_radar(dataset_name, root_path, info_prefix,
+                                    f'{out_dir}/{info_prefix}_infos_train_sweep6_real.pkl')
 
 
 def lyft_data_prep(root_path, info_prefix, version, max_sweeps=10):

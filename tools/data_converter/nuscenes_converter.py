@@ -3,9 +3,12 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
+# pickle has radar informations
+from builtins import breakpoint
 import mmcv
 import numpy as np
 import os
+import copy
 from collections import OrderedDict
 from nuscenes.nuscenes import NuScenes
 from nuscenes.utils.geometry_utils import view_points
@@ -15,6 +18,7 @@ from shapely.geometry import MultiPoint, box
 from typing import List, Tuple, Union
 
 from mmdet3d.core.bbox.box_np_ops import points_cam2img
+from mmdet3d.core.bbox.box_np_ops import points_count_rbbox_second
 from mmdet3d.datasets import NuScenesDataset
 
 nus_categories = ('car', 'truck', 'trailer', 'bus', 'construction_vehicle',
@@ -86,27 +90,32 @@ def create_nuscenes_infos(root_path,
     else:
         print('train scene: {}, val scene: {}'.format(
             len(train_scenes), len(val_scenes)))
-
     train_nusc_infos, val_nusc_infos = _fill_trainval_infos(
-        nusc, nusc_can_bus, train_scenes, val_scenes, test, max_sweeps=max_sweeps)
+        nusc, nusc_can_bus, train_scenes, val_scenes, root_path, test, max_sweeps=max_sweeps)
 
     metadata = dict(version=version)
     if test:
         print('test sample: {}'.format(len(train_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
+        # info_path = osp.join(out_path,
+        #                      '{}_infos_temporal_radar_test.pkl'.format(info_prefix))
         info_path = osp.join(out_path,
-                             '{}_infos_temporal_test.pkl'.format(info_prefix))
+                             '{}_infos_test.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
     else:
         print('train sample: {}, val sample: {}'.format(
             len(train_nusc_infos), len(val_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
+        # info_path = osp.join(out_path,
+        #                      '{}_infos_temporal_radar_train_sweep6.pkl'.format(info_prefix))
         info_path = osp.join(out_path,
-                             '{}_infos_temporal_train.pkl'.format(info_prefix))
+                             '{}_infos_train_sweep6_rcm_0911.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
         data['infos'] = val_nusc_infos
+        # info_val_path = osp.join(out_path,
+        #                          '{}_infos_temporal_radar_val_sweep6.pkl'.format(info_prefix))
         info_val_path = osp.join(out_path,
-                                 '{}_infos_temporal_val.pkl'.format(info_prefix))
+                                 '{}_infos_val_sweep6_rcm_0911.pkl'.format(info_prefix))
         mmcv.dump(data, info_val_path)
 
 
@@ -180,6 +189,7 @@ def _fill_trainval_infos(nusc,
                          nusc_can_bus,
                          train_scenes,
                          val_scenes,
+                         root_path,
                          test=False,
                          max_sweeps=10):
     """Generate the train/val infos from the raw data.
@@ -200,6 +210,8 @@ def _fill_trainval_infos(nusc,
     val_nusc_infos = []
     frame_idx = 0
     for sample in mmcv.track_iter_progress(nusc.sample):
+        # if sample['token'] != 'cc18fde20db74d30825b0b60ec511b7b':
+        #     continue
         lidar_token = sample['data']['LIDAR_TOP']
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
         cs_record = nusc.get('calibrated_sensor',
@@ -209,23 +221,43 @@ def _fill_trainval_infos(nusc,
 
         mmcv.check_file_exist(lidar_path)
         can_bus = _get_can_bus_info(nusc, nusc_can_bus, sample)
+
+        # radar path
+        radar_f_token = sample['data']['RADAR_FRONT']
+        radar_fr_token = sample['data']['RADAR_FRONT_RIGHT']
+        radar_fl_token = sample['data']['RADAR_FRONT_LEFT']
+        radar_bl_token = sample['data']['RADAR_BACK_LEFT']
+        radar_br_token = sample['data']['RADAR_BACK_RIGHT']
+        radar_f_path,_,_ = nusc.get_sample_data(radar_f_token)
+        radar_fr_path,_,_ = nusc.get_sample_data(radar_fr_token)
+        radar_fl_path,_,_ = nusc.get_sample_data(radar_fl_token)
+        radar_bl_path,_,_ = nusc.get_sample_data(radar_bl_token)
+        radar_br_path,_,_ = nusc.get_sample_data(radar_br_token)
+        radar_path = [radar_f_path, radar_fr_path, radar_fl_path, radar_bl_path, radar_br_path]
+        mmcv.check_file_exist(lidar_path)
+
         ##
         info = {
             'lidar_path': lidar_path,
+            'radar_path': radar_path,
             'token': sample['token'],
             'prev': sample['prev'],
             'next': sample['next'],
             'can_bus': can_bus,
             'frame_idx': frame_idx,  # temporal related info
             'sweeps': [],
+            'radar_sweeps':[],
             'cams': dict(),
+            'radars': dict(),
             'scene_token': sample['scene_token'],  # temporal related info
             'lidar2ego_translation': cs_record['translation'],
             'lidar2ego_rotation': cs_record['rotation'],
             'ego2global_translation': pose_record['translation'],
             'ego2global_rotation': pose_record['rotation'],
             'timestamp': sample['timestamp'],
+            'radar_timestamp':dict()
         }
+        radar_npy = make_multisweep_radar_data(nusc,sample,max_sweeps,root_path,info)
 
         if sample['next'] == '':
             frame_idx = 0
@@ -248,6 +280,23 @@ def _fill_trainval_infos(nusc,
             'CAM_BACK_LEFT',
             'CAM_BACK_RIGHT',
         ]
+        cam_infos = []
+        cam_gt_bboxes = []
+        gt_bboxes_cf = []
+        gt_bboxes_cfr = []
+        gt_bboxes_cfl = []
+        gt_bboxes_cb = []
+        gt_bboxes_cbl = []
+        gt_bboxes_cbr = []
+
+        cam_gt_labels = []
+        gt_labels_cf = []
+        gt_labels_cfr = []
+        gt_labels_cfl = []
+        gt_labels_cb = []
+        gt_labels_cbl = []
+        gt_labels_cbr = []
+        CLASSES = ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone']
         for cam in camera_types:
             cam_token = sample['data'][cam]
             cam_path, _, cam_intrinsic = nusc.get_sample_data(cam_token)
@@ -255,11 +304,83 @@ def _fill_trainval_infos(nusc,
                                          e2g_t, e2g_r_mat, cam)
             cam_info.update(cam_intrinsic=cam_intrinsic)
             info['cams'].update({cam: cam_info})
+            
+            # 2d GT bbox를 pickle에 저장
+            coco_info = get_2d_boxes(
+                nusc,
+                cam_info['sample_data_token'],
+                visibilities=['', '1', '2', '3', '4'],
+                mono3d=True)
+            for i in range(len(coco_info)):
+                if coco_info[i] == None:
+                    continue
+                if cam == 'CAM_FRONT':
+                    gt_bboxes_cf.append(coco_info[i]['bbox'])
+                    cat = coco_info[i]['category_name']
+                    if cat in CLASSES:
+                        gt_labels_cf.append(CLASSES.index(cat))
+                    else:
+                        gt_labels_cf.append(-1)
+                if cam == 'CAM_FRONT_RIGHT':
+                    gt_bboxes_cfr.append(coco_info[i]['bbox'])
+                    cat = coco_info[i]['category_name']
+                    if cat in CLASSES:
+                        gt_labels_cfr.append(CLASSES.index(cat))
+                    else:
+                        gt_labels_cfr.append(-1)
+                if cam == 'CAM_FRONT_LEFT':
+                    gt_bboxes_cfl.append(coco_info[i]['bbox'])
+                    cat = coco_info[i]['category_name']
+                    if cat in CLASSES:
+                        gt_labels_cfl.append(CLASSES.index(cat))
+                    else:
+                        gt_labels_cfl.append(-1)
+                if cam == 'CAM_BACK':
+                    gt_bboxes_cb.append(coco_info[i]['bbox'])
+                    cat = coco_info[i]['category_name']
+                    if cat in CLASSES:
+                        gt_labels_cb.append(CLASSES.index(cat))
+                    else:
+                        gt_labels_cb.append(-1)
+                if cam == 'CAM_BACK_LEFT':
+                    gt_bboxes_cbl.append(coco_info[i]['bbox'])
+                    cat = coco_info[i]['category_name']
+                    if cat in CLASSES:
+                        gt_labels_cbl.append(CLASSES.index(cat))
+                    else:
+                        gt_labels_cbl.append(-1)
+                if cam == 'CAM_BACK_RIGHT':
+                    gt_bboxes_cbr.append(coco_info[i]['bbox'])
+                    cat = coco_info[i]['category_name']
+                    if cat in CLASSES:
+                        gt_labels_cbr.append(CLASSES.index(cat))
+                    else:
+                        gt_labels_cbr.append(-1)
 
+        gt_bboxes_cf = np.array(gt_bboxes_cf, dtype=np.float32)
+        gt_bboxes_cfr = np.array(gt_bboxes_cfr, dtype=np.float32)
+        gt_bboxes_cfl = np.array(gt_bboxes_cfl, dtype=np.float32)
+        gt_bboxes_cb = np.array(gt_bboxes_cb, dtype=np.float32)
+        gt_bboxes_cbl = np.array(gt_bboxes_cbl, dtype=np.float32)
+        gt_bboxes_cbr = np.array(gt_bboxes_cbr, dtype=np.float32)
+        
+        gt_labels_cf = np.array(gt_labels_cf)
+        gt_labels_cfr = np.array(gt_labels_cfr)
+        gt_labels_cfl = np.array(gt_labels_cfl)
+        gt_labels_cb = np.array(gt_labels_cb)
+        gt_labels_cbl = np.array(gt_labels_cbl)
+        gt_labels_cbr = np.array(gt_labels_cbr)
+        
+        cam_gt_bboxes.extend((gt_bboxes_cf, gt_bboxes_cfr, gt_bboxes_cfl, gt_bboxes_cb, gt_bboxes_cbl, gt_bboxes_cbr))
+        cam_gt_labels.extend((gt_labels_cf, gt_labels_cfr, gt_labels_cfl, gt_labels_cb, gt_labels_cbl, gt_labels_cbr))
+        info['gt_bboxes_2d'] = cam_gt_bboxes
+        info['gt_labels_2d'] = cam_gt_labels
+            
         # obtain sweeps for a single key-frame
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
         sweeps = []
-        while len(sweeps) < max_sweeps:
+        while len(sweeps) < 10:
+        # while len(sweeps) < max_sweeps:
             if not sd_rec['prev'] == '':
                 sweep = obtain_sensor2top(nusc, sd_rec['prev'], l2e_t,
                                           l2e_r_mat, e2g_t, e2g_r_mat, 'lidar')
@@ -290,7 +411,7 @@ def _fill_trainval_infos(nusc,
                 velo = velo @ np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(
                     l2e_r_mat).T
                 velocity[i] = velo[:2]
-
+            
             names = [b.name for b in boxes]
             for i in range(len(names)):
                 if names[i] in NuScenesDataset.NameMapping:
@@ -298,15 +419,12 @@ def _fill_trainval_infos(nusc,
             names = np.array(names)
             # we need to convert rot to SECOND format.
             gt_boxes = np.concatenate([locs, dims, -rots - np.pi / 2], axis=1)
-            assert len(gt_boxes) == len(
-                annotations), f'{len(gt_boxes)}, {len(annotations)}'
-            info['gt_boxes'] = gt_boxes
-            info['gt_names'] = names
-            info['gt_velocity'] = velocity.reshape(-1, 2)
-            info['num_lidar_pts'] = np.array(
-                [a['num_lidar_pts'] for a in annotations])
-            info['num_radar_pts'] = np.array(
-                [a['num_radar_pts'] for a in annotations])
+            assert len(gt_boxes) == len(annotations), f'{len(gt_boxes)}, {len(annotations)}'
+            info["gt_boxes"] = gt_boxes
+            info["gt_names"] = names
+            info["gt_velocity"] = velocity.reshape(-1, 2)
+            info["num_lidar_pts"] = np.array([a["num_lidar_pts"] for a in annotations])
+            info["num_radar_pts"] = np.array([a['num_radar_pts'] for a in annotations])
             info['valid_flag'] = valid_flag
 
         if sample['scene_token'] in train_scenes:
@@ -397,6 +515,7 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
         'CAM_BACK_LEFT',
         'CAM_BACK_RIGHT',
     ]
+    
     nusc_infos = mmcv.load(info_path)['infos']
     nusc = NuScenes(version=version, dataroot=root_path, verbose=True)
     # info_2d_list = []
@@ -482,11 +601,11 @@ def get_2d_boxes(nusc,
     ann_recs = [
         nusc.get('sample_annotation', token) for token in s_rec['anns']
     ]
+    
     ann_recs = [
         ann_rec for ann_rec in ann_recs
         if (ann_rec['visibility_token'] in visibilities)
     ]
-
     repro_recs = []
 
     for ann_rec in ann_recs:
@@ -524,7 +643,7 @@ def get_2d_boxes(nusc,
             continue
         else:
             min_x, min_y, max_x, max_y = final_coords
-
+        
         # Generate dictionary record to be included in the .json file.
         repro_rec = generate_record(ann_rec, min_x, min_y, max_x, max_y,
                                     sample_data_token, sd_rec['filename'])
@@ -571,7 +690,6 @@ def get_2d_boxes(nusc,
             repro_rec['attribute_id'] = attr_id
 
         repro_recs.append(repro_rec)
-
     return repro_recs
 
 
@@ -668,5 +786,108 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
     coco_rec['category_id'] = nus_categories.index(cat_name)
     coco_rec['bbox'] = [x1, y1, x2 - x1, y2 - y1]
     coco_rec['iscrowd'] = 0
-
+    coco_rec['instance_token'] = repro_rec['instance_token']
     return coco_rec
+
+def make_multisweep_radar_data(nusc, sample, max_sweeps, root_path,info):
+    from nuscenes.utils.data_classes import RadarPointCloud
+    from pyquaternion import Quaternion
+    from nuscenes.utils.geometry_utils import transform_matrix
+    ###########
+    invalid_states = [0,4,8,9,10,11,12,15,16]
+    dynprop_states = range(7)
+    ambig_states=[1,2,3,4]
+    radar_sweeps = []
+    radar_sweeps_r2l_rot = []
+    radar_sweeps_r2l_trans = []
+    ###########
+    
+    all_pc = np.zeros((0, 6))
+    # lidar information at sample time
+    lidar_token = sample["data"]["LIDAR_TOP"]
+    ref_sd_rec = nusc.get('sample_data', sample['data']["LIDAR_TOP"])
+    ref_cs_record = nusc.get('calibrated_sensor',ref_sd_rec['calibrated_sensor_token'])
+    ref_pose_record = nusc.get('ego_pose', ref_sd_rec['ego_pose_token'])
+    
+    # lidar transformation matrix information
+    l2e_r = ref_cs_record['rotation']
+    l2e_t = ref_cs_record['translation']
+    e2g_r = ref_pose_record['rotation']
+    e2g_t = ref_pose_record['translation']
+    l2e_r_mat = Quaternion(l2e_r).rotation_matrix
+    e2g_r_mat = Quaternion(e2g_r).rotation_matrix
+    
+    # Directions of radar data
+    radar_channels = ['RADAR_FRONT','RADAR_FRONT_RIGHT','RADAR_FRONT_LEFT','RADAR_BACK_LEFT','RADAR_BACK_RIGHT']
+    for radar_channel in radar_channels:
+        # each radar data information
+        radar_data_token = sample['data'][radar_channel]
+        radar_sample_data = nusc.get('sample_data',radar_data_token)
+        ref_radar_time = radar_sample_data['timestamp']
+        # At each sweep, We need to merge data from 5 directions
+        for _ in range(max_sweeps):
+            radar_path = osp.join(root_path,radar_sample_data['filename'])
+            radar_sweeps.append(radar_path)
+            radar_cs_record = nusc.get('calibrated_sensor',radar_sample_data['calibrated_sensor_token'])
+            radar_pose_record = nusc.get('ego_pose', radar_sample_data['ego_pose_token'])
+            time_gap = (ref_radar_time-radar_sample_data['timestamp'])*1e-6
+
+            # get radar data and do some filtering
+            current_pc = RadarPointCloud.from_file(
+                radar_path,
+                invalid_states=invalid_states,
+                dynprop_states=dynprop_states,
+                ambig_states=ambig_states).points.T # invalid_states, dynprop_states, ambig_states
+            xyz = current_pc[:, :3]
+            rcs = current_pc[:, 5].reshape(-1,1)
+            vxy_comp = current_pc[:, 8:10]
+            points = np.hstack((xyz, rcs, vxy_comp))
+            
+            if current_pc == 'No_point':
+                continue
+            points[:,:2] += points[:,4:6]*time_gap
+
+            #radar_point to lidar top coordinate
+            r2e_r_s = radar_cs_record['rotation']
+            r2e_t_s = radar_cs_record['translation']
+            e2g_r_s = radar_pose_record['rotation']
+            e2g_t_s = radar_pose_record['translation']
+            r2e_r_s_mat = Quaternion(r2e_r_s).rotation_matrix
+            e2g_r_s_mat = Quaternion(e2g_r_s).rotation_matrix
+
+            R = (r2e_r_s_mat.T @ e2g_r_s_mat.T) @ (
+                np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
+            T = (r2e_t_s @ e2g_r_s_mat.T + e2g_t_s) @ (
+                np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
+            T -= e2g_t @ (np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(
+                l2e_r_mat).T) + l2e_t @ np.linalg.inv(l2e_r_mat).T
+            radar_sweeps_r2l_rot.append(R)
+            radar_sweeps_r2l_trans.append(T)
+            points[:,:3] = points[:,:3] @ R
+            points[:,4:6] = points[:,4:6] @ R[:2,:2]
+            points[:,:3] += T            
+            all_pc = np.vstack((all_pc, points))
+            
+            if radar_sample_data['prev'] == '':
+                break
+            else:
+                radar_sample_data = nusc.get('sample_data', radar_sample_data['prev'])
+    
+    info['radar_sweeps'] = radar_sweeps
+    info['radar_sweeps_r2l_rot'] = radar_sweeps_r2l_rot
+    info['radar_sweeps_r2l_trans'] = radar_sweeps_r2l_trans
+    info['radar_ms_pts'] = all_pc
+    return all_pc
+
+def point_filtering(pc):
+    ambig = pc[:,11]
+    invalid = pc[:,14]
+    dyn = pc[:,3]
+    ambig_list = np.where(ambig==3)[0]
+    valid_criteria = [0,4,8,9,10,11,12,15,16]
+    invalid_list = np.array([idx for idx,point in enumerate(invalid) if point in valid_criteria])
+    intersect = np.intersect1d(ambig_list,invalid_list)
+    if len(intersect) == 0:
+        return 'No_point'
+    else:
+        return pc[intersect,:]

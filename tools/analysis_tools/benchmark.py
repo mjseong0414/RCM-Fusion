@@ -5,8 +5,11 @@ import torch
 from mmcv import Config
 from mmcv.parallel import MMDataParallel
 from mmcv.runner import load_checkpoint, wrap_fp16_model
+# import sys
+# sys.path.append('.')
 import sys
-sys.path.append('.')
+sys.path.append('/home/spalab/RC_fusion/mmdetection3d')
+sys.path.append('/home/spalab/RC_fusion/mmdetection3d/BEVFormer')
 from projects.mmdet3d_plugin.datasets.builder import build_dataloader
 from projects.mmdet3d_plugin.datasets import custom_build_dataset
 # from mmdet3d.datasets import build_dataloader, build_dataset

@@ -336,3 +336,220 @@ def create_groundtruth_database(dataset_class_name,
 
     with open(db_info_save_path, 'wb') as f:
         pickle.dump(all_db_infos, f)
+
+
+
+
+def create_groundtruth_database_radar(dataset_class_name,
+                                data_path,
+                                info_prefix,
+                                info_path=None,
+                                mask_anno_path=None,
+                                used_classes=None,
+                                database_save_path=None,
+                                db_info_save_path=None,
+                                relative_path=True,
+                                add_rgb=False,
+                                lidar_only=False,
+                                bev_only=False,
+                                coors_range=None,
+                                with_mask=False):
+    """Given the raw data, generate the ground truth database.
+
+    Args:
+        dataset_class_name （str): Name of the input dataset.
+        data_path (str): Path of the data.
+        info_prefix (str): Prefix of the info file.
+        info_path (str): Path of the info file.
+            Default: None.
+        mask_anno_path (str): Path of the mask_anno.
+            Default: None.
+        used_classes (list[str]): Classes have been used.
+            Default: None.
+        database_save_path (str): Path to save database.
+            Default: None.
+        db_info_save_path (str): Path to save db_info.
+            Default: None.
+        relative_path (bool): Whether to use relative path.
+            Default: True.
+        with_mask (bool): Whether to use mask.
+            Default: False.
+    """
+    print(f'Create GT Database of {dataset_class_name}')
+    # breakpoint()
+    dataset_class_name = 'CustomNuScenesDataset'
+    
+    dataset_cfg = dict(
+        type=dataset_class_name, data_root=data_path, ann_file=info_path)
+    file_client_args = dict(backend='disk')
+    dataset_cfg.update(
+        use_valid_flag=True,
+        modality = dict(
+                use_lidar=False,
+                use_camera=True,
+                use_radar=True,
+                use_map=False,
+                use_external=True),
+        pipeline=[
+            dict(
+                type='LoadRadarPointsFromFileV2',
+                coord_type='LIDAR',
+                invalid_states = [0,4,8,9,10,11,12,15,16],
+                ambig_states=[1,2,3,4],
+                file_client_args=file_client_args),
+            dict(
+                type='LoadRadarPointsFromMultiSweepsV2',
+                sweeps_num=6,
+                invalid_states = [0,4,8,9,10,11,12,15,16],
+                ambig_states=[1,2,3,4],
+                file_client_args=file_client_args),
+            # dict(
+            #     type='LoadRadarPointsFromFileV2',
+            #     coord_type='LIDAR',
+            #     file_client_args=file_client_args),
+            # dict(
+            #     type='LoadRadarPointsFromMultiSweepsV2',
+            #     sweeps_num=6,
+            #     file_client_args=file_client_args),
+            dict(
+                type='LoadAnnotations3D',
+                with_bbox_3d=True,
+                with_label_3d=True)
+        ])
+
+    from projects.mmdet3d_plugin.datasets import custom_build_dataset
+    dataset = custom_build_dataset(dataset_cfg)
+    exp_path = '_polar_loadB'
+    if database_save_path is None:
+        database_save_path = osp.join(data_path, f'{info_prefix}_gt_database_radar{exp_path}')
+    if db_info_save_path is None:
+        db_info_save_path = osp.join(data_path,
+                                     f'{info_prefix}_dbinfos_train_radar{exp_path}.pkl')
+    mmcv.mkdir_or_exist(database_save_path)
+    all_db_infos = dict()
+    if with_mask:
+        coco = COCO(osp.join(data_path, mask_anno_path))
+        imgIds = coco.getImgIds()
+        file2id = dict()
+        for i in imgIds:
+            info = coco.loadImgs([i])[0]
+            file2id.update({info['file_name']: i})
+
+    group_counter = 0
+    for j in track_iter_progress(list(range(len(dataset)))):
+        input_dict = dataset.get_data_info(j)
+        dataset.pre_pipeline(input_dict)
+        example = dataset.pipeline(input_dict)
+        annos = example['ann_info']
+        image_idx = example['sample_idx']
+        points = example['points'].tensor.numpy()
+        polar_pts = example['points'].polar_coord
+        gt_boxes_3d = annos['gt_bboxes_3d'].tensor.numpy()
+        names = annos['gt_names']
+        group_dict = dict()
+
+        # # print(input_dict['sample_idx'])
+        # if input_dict['sample_idx'] == 'b6c420c3a5bd4a219b1cb82ee5ea0aa7':
+        #     # breakpoint()
+        #     img_list = input_dict['img_filename']
+        #     data_root_path = '/home/jskim/jskim/home_file/RC_fusion/sample_img_pts_list'
+        #     import cv2
+        #     for img_path in img_list:
+        #         CAM_ = img_path.split('/')[4]
+        #         img = cv2.imread(img_path)
+        #         cv2.imwrite(f'{data_root_path}/sample_img_2/{CAM_}.png', img)
+        #     np.save(f'{data_root_path}/sample_radar_2/radar_pts',points)
+        #     # breakpoint()
+        # else:
+        #     continue
+
+        
+        if 'group_ids' in annos:
+            group_ids = annos['group_ids']
+        else:
+            group_ids = np.arange(gt_boxes_3d.shape[0], dtype=np.int64)
+        difficulty = np.zeros(gt_boxes_3d.shape[0], dtype=np.int32)
+        if 'difficulty' in annos:
+            difficulty = annos['difficulty']
+
+        num_obj = gt_boxes_3d.shape[0]
+        
+        polar_pts_indices = box_np_ops.pts_in_polar_coord_rbbox(polar_pts, gt_boxes_3d, 1.0)
+        # breakpoint()
+        # point_indices = box_np_ops.points_in_rbbox(points, gt_boxes_3d)
+
+        if with_mask:
+            # prepare masks
+            gt_boxes = annos['gt_bboxes']
+            img_path = osp.split(example['img_info']['filename'])[-1]
+            if img_path not in file2id.keys():
+                print(f'skip image {img_path} for empty mask')
+                continue
+            img_id = file2id[img_path]
+            kins_annIds = coco.getAnnIds(imgIds=img_id)
+            kins_raw_info = coco.loadAnns(kins_annIds)
+            kins_ann_info = _parse_coco_ann_info(kins_raw_info)
+            h, w = annos['img_shape'][:2]
+            gt_masks = [
+                _poly2mask(mask, h, w) for mask in kins_ann_info['masks']
+            ]
+            # get mask inds based on iou mapping
+            bbox_iou = bbox_overlaps(kins_ann_info['bboxes'], gt_boxes)
+            mask_inds = bbox_iou.argmax(axis=0)
+            valid_inds = (bbox_iou.max(axis=0) > 0.5)
+
+            object_img_patches, object_masks = crop_image_patch(
+                gt_boxes, gt_masks, mask_inds, annos['img'])
+
+        for i in range(num_obj):
+            filename = f'{image_idx}_{names[i]}_{i}.bin'
+            abs_filepath = osp.join(database_save_path, filename)
+            # breakpoint()
+            rel_filepath = osp.join(f'{info_prefix}_gt_database_radar{exp_path}', filename)
+
+            # save point clouds and image patches for each object
+            gt_points = points[polar_pts_indices[:, i]]
+            # gt_points = points[point_indices[:, i]]
+            gt_points[:, :3] -= gt_boxes_3d[i, :3]
+
+            if with_mask:
+                if object_masks[i].sum() == 0 or not valid_inds[i]:
+                    # Skip object for empty or invalid mask
+                    continue
+                img_patch_path = abs_filepath + '.png'
+                mask_patch_path = abs_filepath + '.mask.png'
+                mmcv.imwrite(object_img_patches[i], img_patch_path)
+                mmcv.imwrite(object_masks[i], mask_patch_path)
+            with open(abs_filepath, 'w') as f:
+                gt_points.tofile(f)
+
+            if (used_classes is None) or names[i] in used_classes:
+                db_info = {
+                    'name': names[i],
+                    'path': rel_filepath,
+                    'image_idx': image_idx,
+                    'gt_idx': i,
+                    'box3d_lidar': gt_boxes_3d[i],
+                    'num_points_in_gt': gt_points.shape[0],
+                    'difficulty': difficulty[i],
+                }
+                local_group_id = group_ids[i]
+                # if local_group_id >= 0:
+                if local_group_id not in group_dict:
+                    group_dict[local_group_id] = group_counter
+                    group_counter += 1
+                db_info['group_id'] = group_dict[local_group_id]
+                if 'score' in annos:
+                    db_info['score'] = annos['score'][i]
+                if with_mask:
+                    db_info.update({'box2d_camera': gt_boxes[i]})
+                if names[i] in all_db_infos:
+                    all_db_infos[names[i]].append(db_info)
+                else:
+                    all_db_infos[names[i]] = [db_info]
+
+    for k, v in all_db_infos.items():
+        print(f'load {len(v)} {k} database infos')
+
+    with open(db_info_save_path, 'wb') as f:
+        pickle.dump(all_db_infos, f)

@@ -1,3 +1,4 @@
+from builtins import breakpoint
 import copy
 
 import numpy as np
@@ -6,6 +7,7 @@ from mmdet3d.datasets import NuScenesDataset
 import mmcv
 from os import path as osp
 from mmdet.datasets import DATASETS
+from nuscenes import NuScenes
 import torch
 import numpy as np
 from nuscenes.eval.common.utils import quaternion_yaw, Quaternion
@@ -13,7 +15,7 @@ from .nuscnes_eval import NuScenesEval_custom
 from projects.mmdet3d_plugin.models.utils.visual import save_tensor
 from mmcv.parallel import DataContainer as DC
 import random
-
+from mmdet.datasets.api_wrappers import COCO
 
 @DATASETS.register_module()
 class CustomNuScenesDataset(NuScenesDataset):
@@ -22,12 +24,39 @@ class CustomNuScenesDataset(NuScenesDataset):
     This datset only add camera intrinsics and extrinsics to the results.
     """
 
-    def __init__(self, queue_length=4, bev_size=(200, 200), overlap_test=False, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, json_file = None, queue_length=4, bev_size=(200, 200), overlap_test=False, data_root=None, test_mode=False, with_info =False, *args, **kwargs):
+        super().__init__(test_mode=test_mode,*args, **kwargs)
         self.queue_length = queue_length
         self.overlap_test = overlap_test
         self.bev_size = bev_size
+        # if json_file is not None:
+        #     self.json_infos = self.load_json_coco(json_file)
+        # self.with_info = True
+        # if self.with_info and not test_mode:
+        #     print('nuscenes_dataset')
+        #     self.data_info = NuScenes(version='v1.0-trainval', dataroot=data_root, verbose=True)
         
+    
+    def load_json_coco(self, json_file):
+        self.coco = COCO(json_file)
+        # The order of returned `cat_ids` will not
+        # change with the order of the CLASSES
+        self.cat_ids = self.coco.get_cat_ids(cat_names=self.CLASSES)
+
+        self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}
+        self.img_ids = self.coco.get_img_ids()
+        data_infos = []
+        total_ann_ids = []
+        for i in self.img_ids:
+            info = self.coco.load_imgs([i])[0]
+            info['filename'] = info['file_name']
+            data_infos.append(info)
+            ann_ids = self.coco.get_ann_ids(img_ids=[i])
+            total_ann_ids.extend(ann_ids)
+        assert len(set(total_ann_ids)) == len(
+            total_ann_ids), f"Annotation ids in '{json_file}' are not unique!"
+        return data_infos
+
     def prepare_train_data(self, index):
         """
         Training data preparation.
@@ -36,49 +65,66 @@ class CustomNuScenesDataset(NuScenesDataset):
         Returns:
             dict: Training data dict of the corresponding index.
         """
-        queue = []
-        index_list = list(range(index-self.queue_length, index))
-        random.shuffle(index_list)
-        index_list = sorted(index_list[1:])
-        index_list.append(index)
-        for i in index_list:
+        data_queue = []
+        # temporal aug
+        prev_indexs_list = list(range(index-self.queue_length, index))
+        random.shuffle(prev_indexs_list)
+        prev_indexs_list = sorted(prev_indexs_list[1:], reverse=True)
+        ##
+
+        input_dict = self.get_data_info(index)
+        if input_dict is None:
+            return None
+        frame_idx = input_dict['frame_idx']
+        scene_token = input_dict['scene_token']
+        self.pre_pipeline(input_dict)
+        example = self.pipeline(input_dict)
+        if self.filter_empty_gt and \
+                (example is None or ~(example['gt_labels_3d']._data != -1).any()):
+            return None
+        data_queue.insert(0, example)
+        for i in prev_indexs_list:
             i = max(0, i)
             input_dict = self.get_data_info(i)
             if input_dict is None:
                 return None
-            self.pre_pipeline(input_dict)
-            example = self.pipeline(input_dict)
-            if self.filter_empty_gt and \
-                    (example is None or ~(example['gt_labels_3d']._data != -1).any()):
-                return None
-            queue.append(example)
-        return self.union2one(queue)
-
+            if input_dict['frame_idx'] < frame_idx and input_dict['scene_token'] == scene_token:
+                self.pre_pipeline(input_dict)
+                example = self.pipeline(input_dict)
+                if self.filter_empty_gt and \
+                        (example is None or ~(example['gt_labels_3d']._data != -1).any()):
+                    return None
+                frame_idx = input_dict['frame_idx']
+            data_queue.insert(0, copy.deepcopy(example))
+        return self.union2one(data_queue)
 
     def union2one(self, queue):
+        """
+        convert sample queue into one single sample.
+        """
         imgs_list = [each['img'].data for each in queue]
         metas_map = {}
-        prev_scene_token = None
         prev_pos = None
         prev_angle = None
         for i, each in enumerate(queue):
             metas_map[i] = each['img_metas'].data
-            if metas_map[i]['scene_token'] != prev_scene_token:
-                metas_map[i]['prev_bev_exists'] = False
-                prev_scene_token = metas_map[i]['scene_token']
+            if i == 0:
+                metas_map[i]['prev_bev'] = False
                 prev_pos = copy.deepcopy(metas_map[i]['can_bus'][:3])
                 prev_angle = copy.deepcopy(metas_map[i]['can_bus'][-1])
                 metas_map[i]['can_bus'][:3] = 0
                 metas_map[i]['can_bus'][-1] = 0
             else:
-                metas_map[i]['prev_bev_exists'] = True
+                metas_map[i]['prev_bev'] = True
                 tmp_pos = copy.deepcopy(metas_map[i]['can_bus'][:3])
                 tmp_angle = copy.deepcopy(metas_map[i]['can_bus'][-1])
                 metas_map[i]['can_bus'][:3] -= prev_pos
                 metas_map[i]['can_bus'][-1] -= prev_angle
                 prev_pos = copy.deepcopy(tmp_pos)
                 prev_angle = copy.deepcopy(tmp_angle)
-        queue[-1]['img'] = DC(torch.stack(imgs_list), cpu_only=False, stack=True)
+
+        queue[-1]['img'] = DC(torch.stack(imgs_list),
+                              cpu_only=False, stack=True)
         queue[-1]['img_metas'] = DC(metas_map, cpu_only=True)
         queue = queue[-1]
         return queue
@@ -104,10 +150,13 @@ class CustomNuScenesDataset(NuScenesDataset):
         """
         info = self.data_infos[index]
         # standard protocal modified from SECOND.Pytorch
+        # 피클 파일에서 정보 가져옴
         input_dict = dict(
             sample_idx=info['token'],
             pts_filename=info['lidar_path'],
             sweeps=info['sweeps'],
+            lidar2ego_translation=info['lidar2ego_translation'],
+            lidar2ego_rotation=info['lidar2ego_rotation'],
             ego2global_translation=info['ego2global_translation'],
             ego2global_rotation=info['ego2global_rotation'],
             prev_idx=info['prev'],
@@ -116,19 +165,29 @@ class CustomNuScenesDataset(NuScenesDataset):
             can_bus=info['can_bus'],
             frame_idx=info['frame_idx'],
             timestamp=info['timestamp'] / 1e6,
+            radar_timestamp=info['radar_timestamp'] ,
         )
-
+           
+        # 피클 파일로부터 camera에 해당되는 정보 가져와서 계산
+        # (cam intrinsic), (lidar2cam rotation, translation)
+        # breakpoint()
         if self.modality['use_camera']:
             image_paths = []
             lidar2img_rts = []
             lidar2cam_rts = []
             cam_intrinsics = []
+            cam_intrinsics_flips = []
+            cam_ts = []
+            l2c_rs_=[]
+            
             for cam_type, cam_info in info['cams'].items():
+                # breakpoint()
+                cam_trans = cam_info['sensor2lidar_translation']
                 image_paths.append(cam_info['data_path'])
                 # obtain lidar to image transformation matrix
                 lidar2cam_r = np.linalg.inv(cam_info['sensor2lidar_rotation'])
-                lidar2cam_t = cam_info[
-                    'sensor2lidar_translation'] @ lidar2cam_r.T
+                lidar2cam_t = cam_trans @ lidar2cam_r.T
+                # breakpoint()
                 lidar2cam_rt = np.eye(4)
                 lidar2cam_rt[:3, :3] = lidar2cam_r.T
                 lidar2cam_rt[3, :3] = -lidar2cam_t
@@ -137,22 +196,43 @@ class CustomNuScenesDataset(NuScenesDataset):
                 viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
                 lidar2img_rt = (viewpad @ lidar2cam_rt.T)
                 lidar2img_rts.append(lidar2img_rt)
-
+                viewpad_ = viewpad.copy()
+                viewpad_[0][2] = 1600 - viewpad_[0][2]
                 cam_intrinsics.append(viewpad)
                 lidar2cam_rts.append(lidar2cam_rt.T)
+                cam_intrinsics_flips.append(viewpad_)
+                cam_ts.append(cam_trans)
+                l2c_rs_.append(lidar2cam_r)
 
+            # breakpoint()
             input_dict.update(
                 dict(
                     img_filename=image_paths,
                     lidar2img=lidar2img_rts,
                     cam_intrinsic=cam_intrinsics,
                     lidar2cam=lidar2cam_rts,
+                    cam_intrinsics_flip=cam_intrinsics_flips,
+                    cam_t = np.array(cam_ts),
+                    l2c_r_= np.array(l2c_rs_)
                 ))
 
+        # 피클파일에서 index에 해당하는 gt_box_3d, gt_names_3d, gt_label_3d 정보를 가져옴
         if not self.test_mode:
             annos = self.get_ann_info(index)
             input_dict['ann_info'] = annos
 
+            # if self.with_info:
+            #     input_dict['data_info'] = self.data_info
+        
+        # 피클에서 레이더 정보 가져옴
+        if self.modality['use_radar'] == True:
+            input_dict.update(
+                dict(
+                    radar_pts_filename=info['radar_path'],
+                    radar_sweeps = info['RADAR_sweeps']
+                )
+            )
+        # 피클에서 can_bus 정보 가져옴
         rotation = Quaternion(input_dict['ego2global_rotation'])
         translation = input_dict['ego2global_translation']
         can_bus = input_dict['can_bus']
@@ -163,7 +243,19 @@ class CustomNuScenesDataset(NuScenesDataset):
             patch_angle += 360
         can_bus[-2] = patch_angle / 180 * np.pi
         can_bus[-1] = patch_angle
-
+        
+        # 피클에서 2d detection을 위한 gt와 label정보 가져옴
+        if info.get('gt_bboxes_2d') is not None:
+            gt_bboxes = info['gt_bboxes_2d']
+            gt_labels = info['gt_labels_2d']
+                    
+            input_dict.update(
+                dict(
+                    gt_bboxes=gt_bboxes,
+                    gt_labels=gt_labels
+                )
+            )
+        
         return input_dict
 
     def __getitem__(self, idx):
@@ -200,8 +292,10 @@ class CustomNuScenesDataset(NuScenesDataset):
             dict: Dictionary of evaluation details.
         """
         from nuscenes import NuScenes
-        self.nusc = NuScenes(version=self.version, dataroot=self.data_root,
-                             verbose=True)
+        # breakpoint()
+        if self.data_root is None:
+            self.data_root = './data/nuscenes'
+        self.nusc = NuScenes(version=self.version, dataroot=self.data_root,verbose=True)
 
         output_dir = osp.join(*osp.split(result_path)[:-1])
 
