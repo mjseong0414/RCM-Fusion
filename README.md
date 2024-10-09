@@ -2,9 +2,7 @@
 # RCM-Fusion: Radar-Camera Multi-Level Fusion for 3D Object Detection
 </div>
 
-<div align="center">   
 ![rcm-fusion_demo](https://github.com/user-attachments/assets/2e0f51fb-d962-4811-911c-6e1006b70ab8)
-</div>
 
 
 > **RCM-Fusion: Radar-Camera Multi-Level Fusion for 3D Object Detection**, ICRA 2024
