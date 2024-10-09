@@ -3,7 +3,9 @@
 </div>
 
 ![rcm-fusion_demo](https://github.com/user-attachments/assets/2e0f51fb-d962-4811-911c-6e1006b70ab8)
-
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/2e0f51fb-d962-4811-911c-6e1006b70ab8" alt="rcm-fusion_demo"/>
+</div>
 
 > **RCM-Fusion: Radar-Camera Multi-Level Fusion for 3D Object Detection**, ICRA 2024
 > - [Paper in arXiv](https://arxiv.org/abs/2307.10249)
