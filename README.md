@@ -27,7 +27,7 @@ While LiDAR sensors have been successfully applied to 3D object detection, the a
 # Model Zoo
 
 | Backbone | Method | Lr Schd | NDS| mAP| Config | Download |
-| :---: | :---: | :---: | :---: | :---:|:---:| :---: | :---: |
+| :---: | :---: | :---: | :---: | :---:| :---: | :---: |
 | R50 | RCM-Fusion-R50 | 24ep | 53.5|45.2 |[config](projects/configs/rcmfusion_icra/rcm-fusion_r50.py) |[model](ckpts/rcm-fusion-r50-icra-final.pth)|
 | R101 | RCM-Fusion-R101 | 24ep | 58.7|50.6 |[config](projects/configs/rcmfusion_icra/rcm-fusion_r101.py) |[model](ckpts/rcm-fusion-r101-icra-final.pth)|
 
@@ -49,3 +49,4 @@ If this work is helpful for your research, please consider citing the following 
 Many thanks to these excellent open source projects:
 - [BEVFormer](https://github.com/fundamentalvision/BEVFormer) 
 - [mmdet3d](https://github.com/open-mmlab/mmdetection3d)
+- [detr3d](https://github.com/WangYueFt/detr3d)
