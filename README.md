@@ -39,7 +39,7 @@ If this work is helpful for your research, please consider citing the following 
 @article{icra2024RCMFusion,
   title={Rcm-fusion: Radar-camera multi-level fusion for 3d object detection},
   author={Kim, Jisong and Seong, Minjae and Bang, Geonho and Kum, Dongsuk and Choi, Jun Won}
-  journal={arXiv preprint 	arXiv:2307.10249},
+  journal={arXiv preprint arXiv:2307.10249},
   year={2024}
 }
 ```
