@@ -103,3 +103,4 @@ https://drive.google.com/file/d/1K985CxSAnjKMkt1vg53MkkSwTTcnRYV-/view?usp=drive
 # bevformer_small_static_full_epoch_23 (google drive link)
 https://drive.google.com/file/d/1UtdBG9S8zhyLporXezFqpjtYJU_BTdmP/view?usp=drive_link
 ```
+> - [rcm-fusion-r101-icra-final](https://drive.google.com/file/d/1GO5f9DnJHRltFLWEdgv-owjxKvuXIWv4/view?usp=drive_link)
