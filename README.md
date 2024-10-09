@@ -3,9 +3,10 @@
 # RCM-Fusion: Radar-Camera Multi-Level Fusion for 3D Object Detection
 </div>
 
+![normal_video-ezgif com-optimize](https://github.com/user-attachments/assets/786e1f87-91a8-4ab8-985b-03c1167b8734)
 
 
-https://github.com/user-attachments/assets/313db5ab-bf62-4d07-bddf-e3c83f14c31f.mp4
+
 
 
 
