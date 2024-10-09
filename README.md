@@ -8,7 +8,7 @@ https://user-images.githubusercontent.com/27915819/161392594-fc0082f7-5c37-4919-
 
 > **RCM-Fusion: Radar-Camera Multi-Level Fusion for 3D Object Detection**, ICRA 2024
 > - [Paper in arXiv](https://arxiv.org/abs/2307.10249)
-> Jisong Kim, Minjae Seong, Geonho Bang, Dongsuk Kum, Jun Won Choi
+> Jisong Kim*, Minjae Seong*, Geonho Bang, Dongsuk Kum, Jun Won Choi
 
 
 # Abstract
