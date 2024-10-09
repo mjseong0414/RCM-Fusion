@@ -16,7 +16,7 @@ While LiDAR sensors have been successfully applied to 3D object detection, the a
 
 
 # Methods
-![method](figs/arch.png "model arch")
+![method](rcm-fusion-overall.png "model arch")
 
 
 # Getting Started
