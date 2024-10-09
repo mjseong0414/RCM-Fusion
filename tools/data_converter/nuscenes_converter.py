@@ -91,8 +91,6 @@ def create_nuscenes_infos(root_path,
     if test:
         print('test sample: {}'.format(len(train_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
-        # info_path = osp.join(out_path,
-        #                      '{}_infos_temporal_radar_test.pkl'.format(info_prefix))
         info_path = osp.join(out_path,
                              '{}_infos_test.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
