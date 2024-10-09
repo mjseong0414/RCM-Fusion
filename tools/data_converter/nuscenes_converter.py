@@ -1,9 +1,3 @@
-# ---------------------------------------------
-# Copyright (c) OpenMMLab. All rights reserved.
-# ---------------------------------------------
-#  Modified by Zhiqi Li
-# ---------------------------------------------
-# pickle has radar informations
 from builtins import breakpoint
 import mmcv
 import numpy as np
@@ -106,16 +100,12 @@ def create_nuscenes_infos(root_path,
         print('train sample: {}, val sample: {}'.format(
             len(train_nusc_infos), len(val_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
-        # info_path = osp.join(out_path,
-        #                      '{}_infos_temporal_radar_train_sweep6.pkl'.format(info_prefix))
         info_path = osp.join(out_path,
-                             '{}_infos_train_sweep6_rcm_0911.pkl'.format(info_prefix))
+                             '{}_infos_train_rcmfusion.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
         data['infos'] = val_nusc_infos
-        # info_val_path = osp.join(out_path,
-        #                          '{}_infos_temporal_radar_val_sweep6.pkl'.format(info_prefix))
         info_val_path = osp.join(out_path,
-                                 '{}_infos_val_sweep6_rcm_0911.pkl'.format(info_prefix))
+                                 '{}_infos_val_rcmfusion.pkl'.format(info_prefix))
         mmcv.dump(data, info_val_path)
 
 
