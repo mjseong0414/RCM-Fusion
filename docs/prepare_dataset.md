@@ -33,6 +33,7 @@ bevformer
 │   │   ├── maps/
 │   │   ├── samples/
 │   │   ├── sweeps/
+│   │   ├── lidarseg/
 │   │   ├── v1.0-test/
 |   |   ├── v1.0-trainval/
 |   |   ├── nuscenes_infos_train_rcmfusion.pkl
