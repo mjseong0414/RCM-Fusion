@@ -60,11 +60,9 @@ git clone https://github.com/mjseong0414/RCM-Fusion.git
 ```
 
 **i. Prepare pretrained models.**
-```
-mkdir ckpts
-
-cd ckpts &
-```
+> - [rcm-fusion-r101-icra-final](https://drive.google.com/file/d/1GO5f9DnJHRltFLWEdgv-owjxKvuXIWv4/view?usp=drive_link)
+> - [rcm-fusion-r50-icra-final](https://drive.google.com/file/d/1K985CxSAnjKMkt1vg53MkkSwTTcnRYV-/view?usp=drive_link)
+> - [bevformer_small_static](https://drive.google.com/file/d/1UtdBG9S8zhyLporXezFqpjtYJU_BTdmP/view?usp=drive_link)
 
 
 # Docker instructions
