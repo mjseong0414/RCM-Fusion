@@ -1,3 +1,9 @@
+# ---------------------------------------------
+# Copyright (c) OpenMMLab. All rights reserved.
+# ---------------------------------------------
+#  Modified by Zhiqi Li
+# ---------------------------------------------
+# pickle has radar informations
 from builtins import breakpoint
 import mmcv
 import numpy as np
@@ -12,6 +18,7 @@ from shapely.geometry import MultiPoint, box
 from typing import List, Tuple, Union
 
 from mmdet3d.core.bbox.box_np_ops import points_cam2img
+from mmdet3d.core.bbox.box_np_ops import points_count_rbbox_second
 from mmdet3d.datasets import NuScenesDataset
 
 nus_categories = ('car', 'truck', 'trailer', 'bus', 'construction_vehicle',
@@ -91,18 +98,24 @@ def create_nuscenes_infos(root_path,
         print('test sample: {}'.format(len(train_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
         info_path = osp.join(out_path,
-                             '{}_infos_test.pkl'.format(info_prefix))
+                             '{}_infos_temporal_radar_test_0911.pkl'.format(info_prefix))
+        # info_path = osp.join(out_path,
+        #                      '{}_infos_test.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
     else:
         print('train sample: {}, val sample: {}'.format(
             len(train_nusc_infos), len(val_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
+        # info_path = osp.join(out_path,
+        #                      '{}_infos_temporal_radar_train_sweep6.pkl'.format(info_prefix))
         info_path = osp.join(out_path,
-                             '{}_infos_train_rcmfusion.pkl'.format(info_prefix))
+                             '{}_infos_train_sweep6_rcm_0911.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
         data['infos'] = val_nusc_infos
+        # info_val_path = osp.join(out_path,
+        #                          '{}_infos_temporal_radar_val_sweep6.pkl'.format(info_prefix))
         info_val_path = osp.join(out_path,
-                                 '{}_infos_val_rcmfusion.pkl'.format(info_prefix))
+                                 '{}_infos_val_sweep6_rcm_0911.pkl'.format(info_prefix))
         mmcv.dump(data, info_val_path)
 
 
@@ -787,6 +800,7 @@ def make_multisweep_radar_data(nusc, sample, max_sweeps, root_path,info):
     radar_sweeps = []
     radar_sweeps_r2l_rot = []
     radar_sweeps_r2l_trans = []
+    time_gaps = []
     ###########
     
     all_pc = np.zeros((0, 6))
@@ -818,7 +832,7 @@ def make_multisweep_radar_data(nusc, sample, max_sweeps, root_path,info):
             radar_cs_record = nusc.get('calibrated_sensor',radar_sample_data['calibrated_sensor_token'])
             radar_pose_record = nusc.get('ego_pose', radar_sample_data['ego_pose_token'])
             time_gap = (ref_radar_time-radar_sample_data['timestamp'])*1e-6
-
+            time_gaps.append(time_gap)
             # get radar data and do some filtering
             current_pc = RadarPointCloud.from_file(
                 radar_path,
@@ -861,6 +875,7 @@ def make_multisweep_radar_data(nusc, sample, max_sweeps, root_path,info):
                 radar_sample_data = nusc.get('sample_data', radar_sample_data['prev'])
     
     info['radar_sweeps'] = radar_sweeps
+    info['radar_sweeps_time_gap'] = time_gaps
     info['radar_sweeps_r2l_rot'] = radar_sweeps_r2l_rot
     info['radar_sweeps_r2l_trans'] = radar_sweeps_r2l_trans
     info['radar_ms_pts'] = all_pc
