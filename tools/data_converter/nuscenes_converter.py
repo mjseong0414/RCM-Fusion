@@ -1,9 +1,3 @@
-# ---------------------------------------------
-# Copyright (c) OpenMMLab. All rights reserved.
-# ---------------------------------------------
-#  Modified by Zhiqi Li
-# ---------------------------------------------
-# pickle has radar informations
 from builtins import breakpoint
 import mmcv
 import numpy as np
@@ -18,7 +12,6 @@ from shapely.geometry import MultiPoint, box
 from typing import List, Tuple, Union
 
 from mmdet3d.core.bbox.box_np_ops import points_cam2img
-from mmdet3d.core.bbox.box_np_ops import points_count_rbbox_second
 from mmdet3d.datasets import NuScenesDataset
 
 nus_categories = ('car', 'truck', 'trailer', 'bus', 'construction_vehicle',
@@ -98,24 +91,18 @@ def create_nuscenes_infos(root_path,
         print('test sample: {}'.format(len(train_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
         info_path = osp.join(out_path,
-                             '{}_infos_temporal_radar_test_0911.pkl'.format(info_prefix))
-        # info_path = osp.join(out_path,
-        #                      '{}_infos_test.pkl'.format(info_prefix))
+                             '{}_infos_test_rcmfusion.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
     else:
         print('train sample: {}, val sample: {}'.format(
             len(train_nusc_infos), len(val_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
-        # info_path = osp.join(out_path,
-        #                      '{}_infos_temporal_radar_train_sweep6.pkl'.format(info_prefix))
         info_path = osp.join(out_path,
-                             '{}_infos_train_sweep6_rcm_0911.pkl'.format(info_prefix))
+                             '{}_infos_train_rcmfusion.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
         data['infos'] = val_nusc_infos
-        # info_val_path = osp.join(out_path,
-        #                          '{}_infos_temporal_radar_val_sweep6.pkl'.format(info_prefix))
         info_val_path = osp.join(out_path,
-                                 '{}_infos_val_sweep6_rcm_0911.pkl'.format(info_prefix))
+                                 '{}_infos_val_rcmfusion.pkl'.format(info_prefix))
         mmcv.dump(data, info_val_path)
 
 
@@ -257,7 +244,7 @@ def _fill_trainval_infos(nusc,
             'timestamp': sample['timestamp'],
             'radar_timestamp':dict()
         }
-        radar_npy = make_multisweep_radar_data(nusc,sample,max_sweeps,root_path,info)
+        make_multisweep_radar_data(nusc,sample,max_sweeps,root_path,info)
 
         if sample['next'] == '':
             frame_idx = 0
@@ -280,23 +267,6 @@ def _fill_trainval_infos(nusc,
             'CAM_BACK_LEFT',
             'CAM_BACK_RIGHT',
         ]
-        cam_infos = []
-        cam_gt_bboxes = []
-        gt_bboxes_cf = []
-        gt_bboxes_cfr = []
-        gt_bboxes_cfl = []
-        gt_bboxes_cb = []
-        gt_bboxes_cbl = []
-        gt_bboxes_cbr = []
-
-        cam_gt_labels = []
-        gt_labels_cf = []
-        gt_labels_cfr = []
-        gt_labels_cfl = []
-        gt_labels_cb = []
-        gt_labels_cbl = []
-        gt_labels_cbr = []
-        CLASSES = ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone']
         for cam in camera_types:
             cam_token = sample['data'][cam]
             cam_path, _, cam_intrinsic = nusc.get_sample_data(cam_token)
@@ -304,77 +274,6 @@ def _fill_trainval_infos(nusc,
                                          e2g_t, e2g_r_mat, cam)
             cam_info.update(cam_intrinsic=cam_intrinsic)
             info['cams'].update({cam: cam_info})
-            
-            # 2d GT bbox를 pickle에 저장
-            coco_info = get_2d_boxes(
-                nusc,
-                cam_info['sample_data_token'],
-                visibilities=['', '1', '2', '3', '4'],
-                mono3d=True)
-            for i in range(len(coco_info)):
-                if coco_info[i] == None:
-                    continue
-                if cam == 'CAM_FRONT':
-                    gt_bboxes_cf.append(coco_info[i]['bbox'])
-                    cat = coco_info[i]['category_name']
-                    if cat in CLASSES:
-                        gt_labels_cf.append(CLASSES.index(cat))
-                    else:
-                        gt_labels_cf.append(-1)
-                if cam == 'CAM_FRONT_RIGHT':
-                    gt_bboxes_cfr.append(coco_info[i]['bbox'])
-                    cat = coco_info[i]['category_name']
-                    if cat in CLASSES:
-                        gt_labels_cfr.append(CLASSES.index(cat))
-                    else:
-                        gt_labels_cfr.append(-1)
-                if cam == 'CAM_FRONT_LEFT':
-                    gt_bboxes_cfl.append(coco_info[i]['bbox'])
-                    cat = coco_info[i]['category_name']
-                    if cat in CLASSES:
-                        gt_labels_cfl.append(CLASSES.index(cat))
-                    else:
-                        gt_labels_cfl.append(-1)
-                if cam == 'CAM_BACK':
-                    gt_bboxes_cb.append(coco_info[i]['bbox'])
-                    cat = coco_info[i]['category_name']
-                    if cat in CLASSES:
-                        gt_labels_cb.append(CLASSES.index(cat))
-                    else:
-                        gt_labels_cb.append(-1)
-                if cam == 'CAM_BACK_LEFT':
-                    gt_bboxes_cbl.append(coco_info[i]['bbox'])
-                    cat = coco_info[i]['category_name']
-                    if cat in CLASSES:
-                        gt_labels_cbl.append(CLASSES.index(cat))
-                    else:
-                        gt_labels_cbl.append(-1)
-                if cam == 'CAM_BACK_RIGHT':
-                    gt_bboxes_cbr.append(coco_info[i]['bbox'])
-                    cat = coco_info[i]['category_name']
-                    if cat in CLASSES:
-                        gt_labels_cbr.append(CLASSES.index(cat))
-                    else:
-                        gt_labels_cbr.append(-1)
-
-        gt_bboxes_cf = np.array(gt_bboxes_cf, dtype=np.float32)
-        gt_bboxes_cfr = np.array(gt_bboxes_cfr, dtype=np.float32)
-        gt_bboxes_cfl = np.array(gt_bboxes_cfl, dtype=np.float32)
-        gt_bboxes_cb = np.array(gt_bboxes_cb, dtype=np.float32)
-        gt_bboxes_cbl = np.array(gt_bboxes_cbl, dtype=np.float32)
-        gt_bboxes_cbr = np.array(gt_bboxes_cbr, dtype=np.float32)
-        
-        gt_labels_cf = np.array(gt_labels_cf)
-        gt_labels_cfr = np.array(gt_labels_cfr)
-        gt_labels_cfl = np.array(gt_labels_cfl)
-        gt_labels_cb = np.array(gt_labels_cb)
-        gt_labels_cbl = np.array(gt_labels_cbl)
-        gt_labels_cbr = np.array(gt_labels_cbr)
-        
-        cam_gt_bboxes.extend((gt_bboxes_cf, gt_bboxes_cfr, gt_bboxes_cfl, gt_bboxes_cb, gt_bboxes_cbl, gt_bboxes_cbr))
-        cam_gt_labels.extend((gt_labels_cf, gt_labels_cfr, gt_labels_cfl, gt_labels_cb, gt_labels_cbl, gt_labels_cbr))
-        info['gt_bboxes_2d'] = cam_gt_bboxes
-        info['gt_labels_2d'] = cam_gt_labels
             
         # obtain sweeps for a single key-frame
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])

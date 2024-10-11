@@ -69,12 +69,7 @@ def nuscenes_data_prep(root_path,
     
     dataset_name = 'CustomNuScenesDataset'
     
-    if version == 'v1.0-test':
-        info_test_path = osp.join(
-            out_dir, f'{info_prefix}_infos_temporal_radar_test.pkl')
-        nuscenes_converter.export_2d_annotation(
-            root_path, info_test_path, version=version)
-    else:
+    if version != 'v1.0-test':
         create_groundtruth_database_radar(dataset_name, root_path, info_prefix,
                                     f'{out_dir}/{info_prefix}_infos_train_sweep6_real.pkl')
 
